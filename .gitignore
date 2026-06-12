@@ -6,3 +6,6 @@ bin
 
 # Rider
 .idea
+
+# Generated installer artifacts
+nsis/*.exe
