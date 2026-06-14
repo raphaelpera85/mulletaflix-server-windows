@@ -21,8 +21,11 @@ namespace Jellyfin.Windows.Tray;
 public class TrayApplicationContext : ApplicationContext
 {
     private const string TrayIconResourceName = "Jellyfin.Windows.Tray.Resources.JellyfinIcon.ico";
-    private readonly string _jellyfinServiceName = "JellyfinServer";
-    private readonly string _autostartKey = "JellyfinTray";
+    private const string ProductName = "MulletaFlix";
+    private const string ProcessName = "MulletaFlix";
+    private const string ExecutableName = "MulletaFlix.exe";
+    private const string ServiceName = "MulletaFlixServer";
+    private readonly string _autostartKey = "MulletaFlixTray";
     private string _configFile;
     private string _networkFile;
     private string _port;
@@ -30,7 +33,7 @@ public class TrayApplicationContext : ApplicationContext
     private bool _firstRunDone = false;
     private string _networkAddress;
     private string _executableFile;
-    private string _dataFolder = @"C:\ProgramData\Jellyfin\Server";
+    private string _dataFolder = @"C:\ProgramData\MulletaFlix\Server";
     private string _localJellyfinUrl = "http://localhost:8096/web/index.html";
     private NotifyIcon _trayIcon;
     private ServiceController _serviceController;
@@ -48,7 +51,7 @@ public class TrayApplicationContext : ApplicationContext
     /// </summary>
     public TrayApplicationContext()
     {
-        _serviceController = ServiceController.GetServices().FirstOrDefault(s => s.ServiceName == _jellyfinServiceName);
+        _serviceController = ServiceController.GetServices().FirstOrDefault(s => s.ServiceName == ServiceName);
         if (_serviceController != null)
         {
             _runType = RunType.Service;
@@ -91,7 +94,7 @@ public class TrayApplicationContext : ApplicationContext
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Error: " + ex.Message + "\r\nCouldn't find Jellyfin Installation. The application will now close.");
+                MessageBox.Show("Error: " + ex.Message + $"\r\nCouldn't find {ProductName} installation. The application will now close.");
                 return false;
             }
 
@@ -112,8 +115,7 @@ public class TrayApplicationContext : ApplicationContext
 
         if (_runType == RunType.Executable)
         {
-            // check if Jellyfin is already running, if not, start it
-            if (Process.GetProcessesByName("jellyfin").Length == 0)
+            if (Process.GetProcessesByName(ProcessName).Length == 0)
             {
                 Start(null, null);
             }
@@ -125,9 +127,9 @@ public class TrayApplicationContext : ApplicationContext
     private void CreateTrayIcon()
     {
         _menuItemAutostart = new ToolStripMenuItem("Autostart", null, AutoStartToggle);
-        _menuItemStart = new ToolStripMenuItem("Start Jellyfin", null, Start);
-        _menuItemStop = new ToolStripMenuItem("Stop Jellyfin", null, Stop);
-        _menuItemOpen = new ToolStripMenuItem("Open Jellyfin", null, Open);
+        _menuItemStart = new ToolStripMenuItem($"Start {ProductName}", null, Start);
+        _menuItemStop = new ToolStripMenuItem($"Stop {ProductName}", null, Stop);
+        _menuItemOpen = new ToolStripMenuItem($"Open {ProductName}", null, Open);
         _menuItemLogFolder = new ToolStripMenuItem("Show Logs", null, ShowLogs);
         _menuItemExit = new ToolStripMenuItem("Exit", null, Exit);
 
@@ -145,18 +147,32 @@ public class TrayApplicationContext : ApplicationContext
 
         contextMenu.Opening += new CancelEventHandler(ContextMenuOnPopup);
         using var iconStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(TrayIconResourceName);
-        _trayIcon = new NotifyIcon() { Icon = new Icon(iconStream), ContextMenuStrip = contextMenu, Visible = true, Text = "Jellyfin" };
+        _trayIcon = new NotifyIcon() { Icon = new Icon(iconStream), ContextMenuStrip = contextMenu, Visible = true, Text = ProductName };
         _trayIcon.DoubleClick += Open;
     }
 
     private void LoadJellyfinConfig()
     {
-        RegistryKey registryKey = Registry.LocalMachine.OpenSubKey("Software\\WOW6432Node\\Jellyfin\\Server");
-        _installFolder = registryKey.GetValue("InstallFolder").ToString();
-        _dataFolder = registryKey.GetValue("DataFolder").ToString();
+        using RegistryKey registryKey = OpenServerRegistryKey();
+        if (registryKey == null)
+        {
+            throw new InvalidOperationException("Server registry key was not found.");
+        }
+
+        _installFolder = registryKey.GetValue("InstallFolder")?.ToString();
+        _dataFolder = registryKey.GetValue("DataFolder")?.ToString();
+        if (string.IsNullOrWhiteSpace(_installFolder) || string.IsNullOrWhiteSpace(_dataFolder))
+        {
+            throw new InvalidOperationException("Server registry key is missing InstallFolder or DataFolder.");
+        }
+
         _configFile = Path.Combine(_dataFolder, "config\\system.xml").ToString();
         _networkFile = Path.Combine(_dataFolder, "config\\network.xml").ToString();
-        _executableFile = Path.Combine(_installFolder, "jellyfin.exe");
+        _executableFile = Path.Combine(_installFolder, ExecutableName);
+        if (!File.Exists(_executableFile))
+        {
+            throw new FileNotFoundException($"{ExecutableName} was not found.", _executableFile);
+        }
 
         if (File.Exists(_configFile))
         {
@@ -194,11 +210,33 @@ public class TrayApplicationContext : ApplicationContext
         _localJellyfinUrl = "http://" + _networkAddress + ":" + _port + _baseUrl + "/web/index.html";
     }
 
+    private static RegistryKey OpenServerRegistryKey()
+    {
+        string[] keyNames =
+        {
+            "Software\\WOW6432Node\\MulletaFlix\\Server",
+            "Software\\MulletaFlix\\Server",
+            "Software\\WOW6432Node\\Jellyfin\\Server",
+            "Software\\Jellyfin\\Server"
+        };
+
+        foreach (string keyName in keyNames)
+        {
+            RegistryKey key = Registry.LocalMachine.OpenSubKey(keyName);
+            if (key != null)
+            {
+                return key;
+            }
+        }
+
+        return null;
+    }
+
     private bool CheckShowServiceNotElevatedWarning()
     {
         if (_runType == RunType.Service && !IsElevated())
         {
-            MessageBox.Show("When running Jellyfin as a service, the tray application must be run as Administrator.");
+            MessageBox.Show($"When running {ProductName} as a service, the tray application must be run as Administrator.");
             return true;
         }
 
@@ -236,7 +274,7 @@ public class TrayApplicationContext : ApplicationContext
         }
         else
         {
-            exeRunning = Process.GetProcessesByName("jellyfin").Length > 0;
+            exeRunning = Process.GetProcessesByName(ProcessName).Length > 0;
         }
 
         bool running = (!runningAsService && exeRunning) || (runningAsService && _serviceController.Status == ServiceControllerStatus.Running);
@@ -272,7 +310,7 @@ public class TrayApplicationContext : ApplicationContext
             }
             catch (Exception exception)
             {
-                MessageBox.Show($"Could not start Jellyfin Server. " +
+                MessageBox.Show($"Could not start {ProductName} Server. " +
                                 $"\r\n Because: '{exception.Message.Truncate(25)}'." +
                                 $"You can find the Server Logs at: " +
                                 $"\r\n {_dataFolder + "\\log"}");
@@ -287,7 +325,7 @@ public class TrayApplicationContext : ApplicationContext
                 _serviceController.Refresh();
                 if (_serviceController.Status == ServiceControllerStatus.Stopped)
                 {
-                    MessageBox.Show($"Could not start Jellyfin server service after the specified wait period." +
+                    MessageBox.Show($"Could not start {ProductName} server service after the specified wait period." +
                                     $"\r\n You can find the Server Logs at: " +
                                     $"\r\n {_dataFolder + "\\log"}");
                 }
@@ -297,7 +335,7 @@ public class TrayApplicationContext : ApplicationContext
                 jellyfinServerProcess.Refresh();
                 if (jellyfinServerProcess.HasExited)
                 {
-                    MessageBox.Show($"Could not start Jellyfin server process after the specified wait period." +
+                    MessageBox.Show($"Could not start {ProductName} server process after the specified wait period." +
                                     $"\r\n You can find the Server Logs at: " +
                                     $"\r\n {_dataFolder + "\\log"}");
                 }
@@ -318,7 +356,7 @@ public class TrayApplicationContext : ApplicationContext
         }
         else
         {
-            Process process = Process.GetProcessesByName("jellyfin").FirstOrDefault();
+            Process process = Process.GetProcessesByName(ProcessName).FirstOrDefault();
             if (process == null)
             {
                 return;

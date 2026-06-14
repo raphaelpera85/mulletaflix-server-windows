@@ -16,7 +16,7 @@ namespace Jellyfin.Windows.Tray
         {
             if (IsAlreadyRunning())
             {
-                MessageBox.Show("The Jellyfin tray application is already running.", "Info", new MessageBoxButtons { }, MessageBoxIcon.Information);
+                MessageBox.Show("The MulletaFlix tray application is already running.", "Info", new MessageBoxButtons { }, MessageBoxIcon.Information);
                 Environment.Exit(1);
             }
 
@@ -32,7 +32,7 @@ namespace Jellyfin.Windows.Tray
 
         private static bool IsAlreadyRunning()
         {
-            _mutex = new Mutex(true, "Jellyfin.Windows.Tray", out bool createdNew);
+            _mutex = new Mutex(true, "MulletaFlix.Windows.Tray", out bool createdNew);
 
             return !createdNew;
         }
