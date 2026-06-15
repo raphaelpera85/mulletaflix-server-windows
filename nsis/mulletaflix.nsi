@@ -135,6 +135,15 @@ CRCCheck on ; make sure the installer wasn't corrupted while downloading
 ;--------------------------------
 ;Installer Sections
 
+Function StopRunningMulletaFlixProcesses
+    DetailPrint "Stopping running MulletaFlix processes before install..."
+    ExecWait 'TaskKill /IM MulletaFlix.Windows.Tray.exe /F /T' $0
+    ExecWait 'TaskKill /IM MulletaFlix.exe /F /T' $0
+    ExecWait 'TaskKill /IM mysqld.exe /F /T' $0
+    ExecWait 'TaskKill /IM mariadbd.exe /F /T' $0
+    Sleep 3000
+FunctionEnd
+
 Section "!MulletaFlix Server (required)" InstallMulletaFlixServer
     SectionIn RO ; Mandatory section, isn't this the whole purpose to run the installer.
 
@@ -151,14 +160,15 @@ Section "!MulletaFlix Server (required)" InstallMulletaFlixServer
     DetailPrint "Uninstall finished, $0"
 
     CarryOn: ; We should never hit this under normal circumstances. We should probably rewrite this
-        ; ${If} $_EXISTINGSERVICE_ == 'Yes'
-        ;     ExecWait '"$INSTDIR\nssm.exe" stop MulletaFlixServer' $0
-        ;     ${If} $0 <> 0
-        ;         MessageBox MB_OK|MB_ICONSTOP "Could not stop the MulletaFlix Server service."
-        ;         Abort
-        ;     ${EndIf}
-        ;     DetailPrint "Stopped MulletaFlix Server service, $0"
-        ; ${EndIf}
+        Call StopRunningMulletaFlixProcesses
+        ${If} $_EXISTINGSERVICE_ == 'Yes'
+            ExecWait '"$INSTDIR\nssm.exe" stop MulletaFlixServer' $0
+            ${If} $0 <> 0
+                MessageBox MB_OK|MB_ICONSTOP "Could not stop the MulletaFlix Server service."
+                Abort
+            ${EndIf}
+            DetailPrint "Stopped MulletaFlix Server service, $0"
+        ${EndIf}
 
     SetOutPath "$INSTDIR"
 
@@ -334,7 +344,10 @@ Section "Uninstall"
     PreserveData:
     ; noop
 
-    ExecWait "TaskKill /IM MulletaFlix.Windows.Tray.exe /F"
+    ExecWait "TaskKill /IM MulletaFlix.Windows.Tray.exe /F /T"
+    ExecWait "TaskKill /IM MulletaFlix.exe /F /T"
+    ExecWait "TaskKill /IM mysqld.exe /F /T"
+    ExecWait "TaskKill /IM mariadbd.exe /F /T"
     ExecWait '"$INSTDIR\nssm.exe" statuscode MulletaFlixServer' $0
     DetailPrint "MulletaFlix Server service statuscode, $0"
     IntCmp $0 0 NoServiceUninstall ; service doesn't exist, may be run from desktop shortcut
