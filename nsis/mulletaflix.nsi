@@ -1,4 +1,4 @@
-﻿!verbose 3
+!verbose 3
 ;SetCompressor /SOLID bzip2 TODO Review if this is best option
 ShowInstDetails show
 ShowUninstDetails show
@@ -185,6 +185,9 @@ Section "!MulletaFlix Server (required)" InstallMulletaFlixServer
     WriteRegDWORD HKLM "${INSTDIR_REG_KEY}" "NoModify" 1
     WriteRegDWORD HKLM "${INSTDIR_REG_KEY}" "NoRepair" 1
 
+    ; Allow MariaDB through firewall
+    ExecWait 'netsh advfirewall firewall add rule name="MulletaFlix MariaDB" dir=in action=allow program="$INSTDIR\mariadb\bin\mysqld.exe" enable=yes' $0
+
     ; Create uninstaller
     WriteUninstaller "$INSTDIR\Uninstall.exe"
 SectionEnd
@@ -315,6 +318,7 @@ Section "Uninstall"
 
     DeleteData:
     ; Try to delete only known data dir folders
+    RMDir /r /REBOOTOK "$_MULLETAFLIXDATADIR_\mariadb_data"
     RMDir /r /REBOOTOK "$_MULLETAFLIXDATADIR_\cache"
     RMDir /r /REBOOTOK "$_MULLETAFLIXDATADIR_\config"
     RMDir /r /REBOOTOK "$_MULLETAFLIXDATADIR_\data"
@@ -350,6 +354,9 @@ Section "Uninstall"
         !insertmacro ShowError "Could not remove the MulletaFlix Server service." UninstallRemoveRetry
     ${EndIf}
     DetailPrint "Removed MulletaFlix Server service, $0"
+
+    ; Remove MariaDB firewall rule
+    ExecWait 'netsh advfirewall firewall delete rule name="MulletaFlix MariaDB"' $0
 
     Sleep 3000 ; Give time for Windows to catchup
 
@@ -598,4 +605,3 @@ FunctionEnd
 Function .onInstSuccess
     ; TODO - Eventually add an option to launch tray app or service instead, and remind/offer to start browser
 FunctionEnd
-
